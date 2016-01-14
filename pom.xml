@@ -10,6 +10,7 @@
             <groupId>org.glassfish</groupId>
             <artifactId>javax.json</artifactId>
             <version>1.0.4</version>
+            <type>jar</type>
         </dependency>
         <dependency>
             <groupId>org.apache.poi</groupId>

@@ -1,8 +1,26 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * COPYRIGHT (c) 2016 MCRIT - Cristian Lorenzo Martinez <cristian.lorenzo.martinez@gmail.com>
+ * MIT License
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 package com.mcrit.ht.templateCompiler;
 
 import java.io.FileInputStream;
@@ -62,11 +80,14 @@ public class XlsxTemplate {
             }
             for (int k = 0, ln3 = data.getJsonArray(j).size(); k < ln3; k++) {
                 XSSFCell cell = row.getCell(k + target.getJsonArray(1).getInt(0), XSSFRow.CREATE_NULL_AS_BLANK);
-                try {
-                    cell.setCellValue(data.getJsonArray(j).getJsonNumber(k).doubleValue());
-                }
-                catch (ClassCastException ex) {
-                    cell.setCellValue(data.getJsonArray(j).getString(k));
+
+                switch (data.getJsonArray(j).get(k).getValueType()) {
+                    case STRING:
+                        cell.setCellValue(data.getJsonArray(j).getString(k));
+                        break;
+                    case NUMBER:
+                        cell.setCellValue(data.getJsonArray(j).getJsonNumber(k).doubleValue());
+                        break;
                 }
             }
         } 
@@ -87,7 +108,7 @@ public class XlsxTemplate {
      */
     private void addImageBase64ToSheet(JsonArray target, JsonArray data) {
        int imageType;
-       switch (data.getJsonArray(0).getString(0).toLowerCase()) {
+       switch (data.getString(0).toLowerCase()) {
            case "dib":
                imageType = Workbook.PICTURE_TYPE_DIB;
                break;
@@ -111,7 +132,7 @@ public class XlsxTemplate {
                throw new RuntimeException("The provided format type is not supported.");
         }
 
-        final byte[] decodedImg = Base64.getDecoder().decode(data.getJsonArray(0).getString(1));
+        final byte[] decodedImg = Base64.getDecoder().decode(data.getString(1));
         final int pictureIndex = workbook.addPicture(decodedImg, imageType);
 
         final CreationHelper helper = workbook.getCreationHelper();
