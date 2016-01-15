@@ -81,9 +81,29 @@ public class XlsxTemplate {
 	    fis.close();
 	}
     }
-
+    
+    private XSSFSheet getSheetByNameOrIndex(JsonArray target) {
+        XSSFSheet sheet;
+        
+        switch (target.get(0).getValueType()) {
+            case STRING:
+                sheet = workbook.getSheet(target.getString(0));
+                if (sheet == null) {
+                    throw new java.lang.IllegalArgumentException("Sheet with name " + target.getString(0) + " not found.");
+                }
+                break;
+            case NUMBER:
+                sheet = workbook.getSheetAt(target.getInt(0));
+                break;
+            default:
+                throw new RuntimeException("Invalid type in target(0). Must be a integer or a string.");
+        }
+                
+        return sheet;
+    }
+    
     private void populateTextSheet(JsonArray target, JsonArray data) {
-        XSSFSheet sheet = workbook.getSheetAt(target.getInt(0));
+        XSSFSheet sheet = getSheetByNameOrIndex(target);
 
         for (int j = 0, ln2 = data.size(); j < ln2; j++) {
             XSSFRow row = sheet.getRow(j + target.getJsonArray(1).getInt(1));
@@ -169,7 +189,7 @@ public class XlsxTemplate {
         final CreationHelper helper = workbook.getCreationHelper();
         final ClientAnchor anchor = helper.createClientAnchor();
 
-        XSSFSheet sheet = workbook.getSheetAt(target.getInt(0));
+        XSSFSheet sheet = getSheetByNameOrIndex(target);
         final Drawing drawing = sheet.createDrawingPatriarch();
 
         anchor.setAnchorType(ClientAnchor.MOVE_AND_RESIZE);
