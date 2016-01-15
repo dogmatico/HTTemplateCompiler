@@ -23,19 +23,25 @@
 
 package com.mcrit.ht.templateCompiler;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.StringReader;
+
 import java.util.Arrays;
 import java.util.stream.IntStream;
 import java.util.Base64;
+
 import javax.json.Json;
 import javax.json.JsonArray;
 import javax.json.JsonObject;
 import javax.json.JsonReader;
 import javax.json.JsonValue;
+import org.apache.batik.transcoder.TranscoderException;
+
 import org.apache.poi.ss.formula.IStabilityClassifier;
 import org.apache.poi.ss.formula.udf.UDFFinder;
 import org.apache.poi.ss.usermodel.Cell;
@@ -52,9 +58,16 @@ import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 
+import org.apache.batik.transcoder.image.PNGTranscoder;
+import org.apache.batik.transcoder.TranscoderInput;
+import org.apache.batik.transcoder.TranscoderOutput;
+
 /**
- *
- * @author Cristian Lorenzo <cristian.lorenzo.martinez@gmail.com>
+ * Class used in the HIGH-TOOL projecto to render XLSX templates.
+ * It receives data from stdio as JSON and pipes the compiled template to 
+ * stdout. Those streams are used to comunicate with the hosting environment: 
+ * a Node.js child process.
+ * @author Cristian Lorenzo i Martínez <cristian.lorenzo.martinez@gmail.com>
  */
 public class XlsxTemplate {
     private static XSSFWorkbook workbook;
@@ -68,7 +81,7 @@ public class XlsxTemplate {
 	    fis.close();
 	}
     }
-    
+
     private void populateTextSheet(JsonArray target, JsonArray data) {
         XSSFSheet sheet = workbook.getSheetAt(target.getInt(0));
 
@@ -92,7 +105,7 @@ public class XlsxTemplate {
             }
         } 
     }
-    
+
     /**
      * Adds and resize a image encoded in base64.
      * 
@@ -106,7 +119,7 @@ public class XlsxTemplate {
      *      (String) Base64 encoded image
      *  ]
      */
-    private void addImageBase64ToSheet(JsonArray target, JsonArray data) {
+    private void addImageBase64ToSheet(JsonArray target, JsonArray data) throws TranscoderException, IOException {
        int imageType;
        switch (data.getString(0).toLowerCase()) {
            case "dib":
@@ -122,6 +135,7 @@ public class XlsxTemplate {
             case "pict":
                imageType = Workbook.PICTURE_TYPE_PICT;
                break;
+            case "svg":
             case "png":
                imageType = Workbook.PICTURE_TYPE_PNG;
                break;
@@ -132,7 +146,24 @@ public class XlsxTemplate {
                throw new RuntimeException("The provided format type is not supported.");
         }
 
-        final byte[] decodedImg = Base64.getDecoder().decode(data.getString(1));
+        final byte[] decodedImg;
+        if ("svg".equals(data.getString(0).toLowerCase())) {
+            // Use batik to transform svg to png;
+            PNGTranscoder transcoder = new PNGTranscoder();
+
+            TranscoderInput input = new TranscoderInput(new ByteArrayInputStream(Base64.getDecoder().decode(data.getString(1))));
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            TranscoderOutput output = new TranscoderOutput(bos);
+
+            transcoder.transcode(input, output);
+            bos.flush();
+            bos.close();
+            decodedImg = ((ByteArrayOutputStream) output.getOutputStream()).toByteArray();
+
+        } else {
+            decodedImg = Base64.getDecoder().decode(data.getString(1));
+        }
+
         final int pictureIndex = workbook.addPicture(decodedImg, imageType);
 
         final CreationHelper helper = workbook.getCreationHelper();
@@ -146,12 +177,12 @@ public class XlsxTemplate {
         anchor.setRow1(target.getJsonArray(1).getInt(1));
         anchor.setCol2(target.getJsonArray(2).getInt(0));
         anchor.setRow2(target.getJsonArray(2).getInt(1));
-        
+
         final Picture pict = drawing.createPicture(anchor, pictureIndex);
         pict.resize();
     }
 
-    private void compileTemplate(JsonArray cellData) {
+    private void compileTemplate(JsonArray cellData) throws TranscoderException, IOException {
         
         for (JsonValue chunkToInsert : cellData) {
             JsonArray target = ((JsonObject) chunkToInsert).getJsonArray("target");
@@ -207,7 +238,7 @@ public class XlsxTemplate {
         workbook.write(stream);
         stream.close();
     }
-    
+
     /**
      *
      * @param templatePath: URL of the template
@@ -222,16 +253,17 @@ public class XlsxTemplate {
      *          "data": [[]] ==> Matrix in standard notation rows, columns
      *       }]
      * @throws IOException String templatePath, String JSONString
+     * @throws org.apache.batik.transcoder.TranscoderException
      */
-    static public void compileAndStreamTemplate(String templatePath, String JSONString) throws IOException {
+    static public void compileAndStreamTemplate(String templatePath, String JSONString) throws IOException, TranscoderException {
         JsonReader jsonReader = Json.createReader(new StringReader(JSONString));
-        
+
         XlsxTemplate instance = new XlsxTemplate(templatePath);
         instance.compileTemplate(jsonReader.readArray());
         instance.recalculateAll();
         instance.streamWorkbook(System.out);
     }
-    
+
     public static void main(String[] args) throws IOException {
         XlsxTemplate instance = new XlsxTemplate(args[0]);
         System.out.println("Loaded");
@@ -239,7 +271,7 @@ public class XlsxTemplate {
         System.out.println("DONE");
         //instance.streamWorkbook(System.out);   
     }
-     
+
     public static void recalculateSAF(XSSFWorkbook wb) {
         XSSFFormulaEvaluator evaluator = XSSFFormulaEvaluator.create(wb, IStabilityClassifier.TOTALLY_IMMUTABLE, UDFFinder.DEFAULT);
         for (Sheet sheet : wb) {
